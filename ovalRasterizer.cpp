@@ -86,7 +86,6 @@ static int computeEdgeList( int scanY,
     {
       if( intervals_intersect( blist[ ii ].top, blist[ ii ].bottom, topY, bottomY ) )
         {
-          compute_range( ol[ ii ], topY, )
         }
     }
 

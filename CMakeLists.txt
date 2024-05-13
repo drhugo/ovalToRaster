@@ -14,7 +14,6 @@ find_package(Qt5 COMPONENTS
         REQUIRED)
 
 find_package(doctest REQUIRED)
-include_directories(/usr/local/include)
 
 add_executable(ovalToRaster main.cpp
         ovalRasterizer.cpp
@@ -25,6 +24,12 @@ add_executable(ovalToRasterTest test_ovalRasterizer.cpp
         ovalRasterizer.h)
 
 target_compile_definitions(ovalToRasterTest PRIVATE TESTING)
+
+if(EXISTS /usr/local/include)
+    target_include_directories(ovalToRasterTest PRIVATE /usr/local/include)
+else()
+    target_include_directories(ovalToRasterTest PRIVATE /opt/homebrew/include)
+endif()
 
 target_link_libraries(ovalToRaster
         Qt5::Core
