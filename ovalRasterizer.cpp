@@ -64,10 +64,74 @@ static floatBounds computeBounds( const ovalRecord& oval )
 }
 /** ---------------------------------------------------------------------------
 * \fn intervals_intersect
+* \description Determines whether an interval defined by a1-a2 overlaps with
+*     an interval defined by b1-b2.  The two intervals are said to overlap if
+*     the a1 is less than a2 and the range a1-a2 covers any value also covered
+*     by b1-b2.
 ---------------------------------------------------------------------------- */
 static bool intervals_intersect( float a1, float a2, float b1, float b2 )
 {
   return ( a1 < a2 ) and ( not ( a2 < b1 or b2 < a1 ) );
+}
+/** ---------------------------------------------------------------------------
+* \fn compute_oval_roots
+* \description Given a value y, this routine will find the places (if any) where
+*     the oval intersects.
+---------------------------------------------------------------------------- */
+int compute_oval_roots( float xx[2], float yy, const ovalRecord& oval )
+{
+  float sinT = sin( oval.angle );
+  float cosT = cos( oval.angle );
+
+  float sin2T = sinT * sinT;
+  float cos2T = cosT * cosT;
+
+  float rx2 = oval.radiusx * oval.radiusx;
+  float ry2 = oval.radiusy * oval.radiusy;
+  float dy = yy - oval.centery;
+
+  float aa = rx2 * sin2T + ry2 * cos2T;
+  float bb = 2.f * dy * sinT * cosT * ( ry2 - rx2 );
+  float cc = dy * dy * ( rx2 * cos2T + ry2 * sin2T ) - rx2 * ry2;
+
+  float radical = bb * bb - 4.f * aa * cc;
+
+  int num_roots;
+
+  // If the radical is positive, then there are two roots
+
+  if( 0.f < radical )
+    {
+      num_roots = 2;
+
+      float sr = sqrt( radical );
+
+      float x1 = oval.centerx + ( ( sr - bb ) / ( 2.f * aa ) );
+      float x2 = oval.centerx + ( ( 0.f - sr - bb ) / ( 2.f * aa ) );
+
+      if( x1 < x2 )
+        {
+          xx[ 0 ] = x1;
+          xx[ 1 ] = x2;
+        }
+      else
+        {
+          xx[ 0 ] = x2;
+          xx[ 1 ] = x1;
+        }
+    }
+  else if( 0.f == radical )   // There is only one root
+    {
+      num_roots = 1;
+
+      xx[ 0 ] = oval.centerx + ( bb / ( -2.f * aa ) );
+    }
+  else
+    {
+      num_roots = 0;
+    }
+
+  return num_roots;
 }
 /** ---------------------------------------------------------------------------
 * \fn computeEdgeList
@@ -143,7 +207,7 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
   return rr;
 }
 /** ---------------------------------------------------------------------------
- * TESTS
+ * ---------------------------TEST CASES --------------------------------------
 ---------------------------------------------------------------------------- */
 #ifdef TESTING
 TEST_CASE( "AddBounds" )
@@ -200,6 +264,51 @@ TEST_CASE( "Intervals Intersect" )
 
   CHECK( intervals_intersect( 10.f, 40.f, 30.f, 31.f ) );  // complete overlap
   CHECK( intervals_intersect( 30.1f, 30.9f, 30.f, 31.f ) );  // completely contained
+}
+TEST_CASE( "Compute Roots" )
+{
+  ovalRecord oval = {
+    .centerx = 10.f,
+    .centery = 5.f,
+    .radiusx = 3.f,
+    .radiusy = 4.f,
+    .angle = M_PI_4
+  };
+
+  float xx[ 2 ];
+
+  int num_roots = compute_oval_roots( xx, 6.f, oval );    // above the center
+  CHECK( num_roots == 2 );
+  CHECK( xx[ 0 ] == doctest::Approx( 6.46448f ) );
+  CHECK( xx[ 1 ] == doctest::Approx( 12.9755f ) );
+
+  float dx_above = xx[ 1 ] - xx[ 0 ];
+
+  num_roots = compute_oval_roots( xx, 4.f, oval );        // below the center
+  CHECK( num_roots == 2 );
+  CHECK( xx[ 0 ] < xx[ 1 ] );
+  CHECK( xx[ 0 ] == doctest::Approx( 7.02448f ) );
+  CHECK( xx[ 1 ] == doctest::Approx( 13.5355f ) );
+
+  float dx_below = xx[ 1 ] - xx[ 0 ];
+
+  // Since we test one line line above and one line below the center of the
+  // oval, we expect the distance between the roots to be the same
+
+  CHECK( ( dx_above - dx_below ) == doctest::Approx( 0 ) );
+
+  oval.angle = 0.f;   // rest the angle to check for one root
+  num_roots = compute_oval_roots( xx, 1., oval );
+  CHECK( num_roots == 1 );
+  CHECK( xx[ 0 ] < xx[ 1 ] );
+  CHECK( xx[ 0 ] == doctest::Approx( 10.f ) );
+
+  num_roots = compute_oval_roots( xx, 0.f, oval );  // below
+  CHECK( num_roots == 0.f );
+
+  num_roots = compute_oval_roots( xx, 10.f, oval );   // above
+  CHECK( num_roots == 0.f );
+
 }
 #endif
 
