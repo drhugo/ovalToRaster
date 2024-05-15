@@ -104,21 +104,10 @@ int compute_oval_roots( float xx[2], float yy, const ovalRecord& oval )
     {
       num_roots = 2;
 
-      float sr = sqrt( radical );
+      float sr = sqrt( radical );   // This is always positive
 
-      float x1 = oval.centerx + ( ( sr - bb ) / ( 2.f * aa ) );
-      float x2 = oval.centerx + ( ( 0.f - sr - bb ) / ( 2.f * aa ) );
-
-      if( x1 < x2 )
-        {
-          xx[ 0 ] = x1;
-          xx[ 1 ] = x2;
-        }
-      else
-        {
-          xx[ 0 ] = x2;
-          xx[ 1 ] = x1;
-        }
+      xx[ 0 ] = oval.centerx + ( ( 0.f - sr - bb ) / ( 2.f * aa ) );
+      xx[ 1 ] = oval.centerx + ( ( sr - bb ) / ( 2.f * aa ) );
     }
   else if( 0.f == radical )   // There is only one root
     {
@@ -279,8 +268,8 @@ TEST_CASE( "Compute Roots" )
 
   int num_roots = compute_oval_roots( xx, 6.f, oval );    // above the center
   CHECK( num_roots == 2 );
-  CHECK( xx[ 0 ] == doctest::Approx( 6.46448f ) );
-  CHECK( xx[ 1 ] == doctest::Approx( 12.9755f ) );
+  CHECK( xx[ 0 ] == doctest::Approx( 6.464482f ) );
+  CHECK( xx[ 1 ] == doctest::Approx( 12.975518f ) );
 
   float dx_above = xx[ 1 ] - xx[ 0 ];
 
