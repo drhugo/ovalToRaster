@@ -46,8 +46,6 @@ static float compute_sdf( const ovalRecord *oval, float xx, float yy )
 ovalViewer::ovalViewer( QWidget *parent ) : QWidget( parent ), cmd_( nullptr ), scale_( 10 )
 {
   setFocusPolicy( Qt::StrongFocus );
-
-  ovalList_.push_back({50, 50, 10, 20, 0.33 * M_PI });
 }
 /** ----------------------------------------------------------------------------
   \fn ovalViewer::paintEvent
@@ -89,6 +87,10 @@ void ovalViewer::paintEvent( QPaintEvent *event )
             }
         }
       paint.drawImage( rect(), img );
+    }
+  else
+    {
+      paint.drawText( QPoint( 15, 40 ), QString( "Click and drag to add an oval" ) );
     }
 }
 /** ----------------------------------------------------------------------------

@@ -442,7 +442,7 @@ static int computeEdgeList( int scanY,
     }
   else  // the edgelist is empty, nothing intersected our span
     {
-      next_scanY = (int) floor( nextY );
+      next_scanY = std::max( (int) floor( nextY ), scanY + 1 );;
     }
 
   return next_scanY;
