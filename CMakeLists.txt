@@ -17,7 +17,9 @@ find_package(doctest REQUIRED)
 
 add_executable(ovalToRaster main.cpp
         ovalRasterizer.cpp
-        ovalRasterizer.h)
+        ovalRasterizer.h
+        ovalViewer.cpp
+        ovalViewer.h)
 
 add_executable(ovalToRasterTest test_ovalRasterizer.cpp
         ovalRasterizer.cpp

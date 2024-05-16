@@ -442,10 +442,27 @@ static int computeEdgeList( int scanY,
     }
   else  // the edgelist is empty, nothing intersected our span
     {
-      next_scanY = (int) ceil( nextY );
+      next_scanY = (int) floor( nextY );
     }
 
   return next_scanY;
+}
+/** ---------------------------------------------------------------------------
+* \fn extend_or_push
+---------------------------------------------------------------------------- */
+static void push_or_merge_run( std::vector< pixelRun >& rr, const pixelRun& pr )
+{
+  if( rr.empty() or
+      rr.back().value != pr.value or
+      rr.back().lineY != pr.lineY or
+      rr.back().endX != pr.startX )
+    {
+      rr.push_back( pr );
+    }
+  else
+    {
+      rr.back().endX = pr.endX;
+    }
 }
 /** ---------------------------------------------------------------------------
 * \fn ovalListToRaster
@@ -470,7 +487,7 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
 
       int topY = (int)std::max( 0.f, bounds.top );
       int endY = (int)std::min( (float)height, std::ceil( bounds.bottom ) );
-      int right_edge = (int)std::min((float) width, bounds.right );
+      int right_edge = (int)std::min((float) width, ceil( bounds.right ) );
 
       pixelRun pr;
 
@@ -495,57 +512,81 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
 
                   pr.startX = std::max( 0, edgeList[ 0 ].startx );
 
-                  do
+                  if( pr.startX < right_edge )
                     {
-                      int inside = 0;
-
-                      pr.endX = right_edge;
-
-                      // For each value of x, we need to go through the list of edges
-                      // and collect the oval edges that would need to be evaluated there
-
-                      for( const auto& edge : edgeList )
+                      do
                         {
-                          if( edge.startx <= pr.startX )
-                            {
-                              if( edge.edgeType == edgeRecord::falling )
-                                inside += 1;
-                              else
-                                inside -= 1;
+                          int inside = 0;
 
-                              // Check if we are in the portion that needs to be anti-aliased
-                              if( edge.startx <= pr.startX and pr.startX < edge.endx )
+                          pr.endX = right_edge;  // assume that we're going to the edge
+
+                          // For each value of x, we need to go through the list of edges
+                          // and collect the oval edges that would need to be evaluated there
+
+                          for( const auto& edge : edgeList )
+                            {
+                              if( edge.startx <= pr.startX )
                                 {
-                                  aalist.push_back( edge.oval );
+                                  if( edge.edgeType == edgeRecord::falling )
+                                    {
+                                      if( edge.startx <= pr.startX )
+                                        {
+                                          inside += 1;
+                                        }
+                                    }
+                                  else //  edge.Type == edgeRecord::rising
+                                    {
+                                      if( edge.endx <= pr.startX )
+                                        {
+                                          inside -= 1;
+                                        }
+                                    }
+
+                                  // Check if we are in the portion that needs to be anti-aliased
+                                  if( edge.startx <= pr.startX and pr.startX < edge.endx )
+                                    {
+                                      aalist.push_back( edge.oval );
+                                    }
+                                }
+                              else  // this edge starts is beyond our current scan point
+                                {
+                                  pr.endX = std::min( edge.startx, right_edge );
+                                  break;
                                 }
                             }
-                          else  // this edge is to the right of our current scan point
+
+                          if( aalist.empty() )
                             {
-                              pr.endX = std::min( edge.startx, right_edge );
-                              break;
+                              if( 0 < inside )
+                                {
+                                  pr.value = 1.f;   // a solid run
+                                  push_or_merge_run( rr, pr );
+                                }
                             }
-                        }
-
-                      if( aalist.empty() )
-                        {
-                          if( inside )
+                          else
                             {
-                              pr.value = 1.f;   // a solid run
-                              rr.push_back( pr );
+                              if( inside == 1 )
+                                {
+                                  pr.endX = pr.startX + 1;
+                                  pr.value = compute_aa_pixel( aalist, pr.startX, pr.lineY );
+
+                                  push_or_merge_run( rr, pr );
+                                }
+                              else if( 1 < inside )
+                                {
+                                  pr.value = 1.f;
+                                  pr.endX = pr.startX + 1;
+
+                                  push_or_merge_run( rr, pr );
+                                }
+
+                              aalist.resize( 0 );
                             }
-                        }
-                      else
-                        {
-                          pr.endX = pr.startX + 1;
-                          pr.value = compute_aa_pixel( aalist, pr.startX, pr.lineY );
 
-                          rr.push_back( pr );
-                          aalist.resize(0);
-                        }
+                          pr.startX = pr.endX;
 
-                      pr.startX = pr.endX;
-
-                    } while( pr.startX < right_edge );
+                        }  while( pr.startX < right_edge );
+                    }
                 }
 
               if( nextY < endY )
@@ -724,6 +765,20 @@ TEST_CASE("AA_Case_Tests")
   CHECK( aa_case_4( 1.f, 1.f, 1.f, 1.f, 0.f ) == doctest::Approx( 0.f ) );
   CHECK( aa_case_4( 1.f, 1.f, 1.f, 1.f, -1.f ) == doctest::Approx( 0.25f ) );
   CHECK( aa_case_4( 0.f, 0.f, 0.f, 0.f, -1.f ) == doctest::Approx( 1.0f ) );
+}
+TEST_CASE( "Merge and Push Runs")
+{
+  std::vector<pixelRun> runList;
+
+  push_or_merge_run( runList, {101, 100, 200, 1.f} );
+  CHECK( runList.size() == 1 );   // check if empty
+  push_or_merge_run( runList, {101, 200, 210, .9f} );
+  CHECK( runList.size() == 2 );  // non-match on the value
+  push_or_merge_run( runList, {102, 210, 220, .9f} );
+  CHECK( runList.size() == 3 );  // non-match on the lineY
+  push_or_merge_run( runList, {102, 220, 230, .9f} );
+  CHECK( runList.size() == 3 );
+  CHECK( runList.back().endX == 230 );
 }
 TEST_SUITE_END();
 #endif
