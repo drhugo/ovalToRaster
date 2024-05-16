@@ -7,6 +7,7 @@
 
 #include "ovalRasterizer.h"
 #include <cmath>
+#include <cassert>
 
 #ifdef TESTING
 #include <doctest/doctest.h>
@@ -36,6 +37,25 @@ struct edgeRecord
     enum { falling, rising } edgeType;    /// Whether it is a rising or falling edge
 
     const ovalRecord *oval;
+
+    bool operator<( const struct edgeRecord& other ) const
+    {
+      return this->startx < other.startx;
+    }
+
+    void set_span( float x1, float x2 )
+    {
+      if( x1 < x2 )
+        {
+          startx = (int) floor( x1 );
+          endx = (int) ceil( x2 );
+        }
+      else
+        {
+          startx = (int) floor( x2 );
+          endx = (int) ceil( x1 );
+        }
+    }
   };
 
 /** ---------------------------------------------------------------------------
@@ -78,7 +98,7 @@ static bool intervals_intersect( float a1, float a2, float b1, float b2 )
 * \description Given a value y, this routine will find the places (if any) where
 *     the oval intersects.
 ---------------------------------------------------------------------------- */
-int compute_oval_roots( float xx[2], float yy, const ovalRecord& oval )
+static int compute_oval_roots( float xx[2], float yy, const ovalRecord& oval )
 {
   float sinT = sin( oval.angle );
   float cosT = cos( oval.angle );
@@ -123,26 +143,309 @@ int compute_oval_roots( float xx[2], float yy, const ovalRecord& oval )
   return num_roots;
 }
 /** ---------------------------------------------------------------------------
+* \fn compute_sdf
+* \description compute the signed distance to an oval.  The distance is positive
+*     if outside, negative if inside
+---------------------------------------------------------------------------- */
+static float compute_sdf( const ovalRecord *oval, float xx, float yy )
+{
+  float dx = xx - oval->centerx;
+  float dy = yy - oval->centery;
+
+  float rr;
+
+  if( dx != 0.f or dy != 0.f )
+    {
+      float angle = oval->angle - atan2( dy, dx );
+
+      float sinT = sin( angle );
+      float cosT = cos( angle );
+      float a2 = oval->radiusx * oval->radiusx;
+      float b2 = oval->radiusy * oval->radiusy;
+
+      float r2 = ( a2 * b2 ) / ( a2 * sinT * sinT + b2 * cosT * cosT );
+
+      rr = hypot( dx, dy ) - sqrt( r2 );
+    }
+  else  // the point is in the center
+    {
+      rr = -std::min( oval->radiusx, oval->radiusy );
+    }
+
+  return rr;
+}
+/** ---------------------------------------------------------------------------
+* \fn aa_case_1
+---------------------------------------------------------------------------- */
+static float aa_case_1( float p0, float p1, float p2 )
+{
+  assert( p0 <= 0.f );
+  assert( 0.f <= p1 );
+  assert( 0.f <= p2 );
+
+  float s1 = p0 / ( p0 - p1 );
+  float s2 = p0 / ( p0 - p2 );
+
+  return 0.5f * s1 * s2;
+}
+/** ---------------------------------------------------------------------------
+* \fn aa_case_2
+---------------------------------------------------------------------------- */
+static float aa_case_2( float p0, float p1, float p2, float p3 )
+{
+  assert( p0 < 0.f );
+  assert( p1 < 0.f );
+  assert( 0.f <= p2 );
+  assert( 0.f <= p3 );
+
+  float s1 = p0 / ( p0 - p2 );
+  float s2 = p1 / ( p1 - p3 );
+
+  return 0.5f * ( s1 + s2 );
+}
+/** ---------------------------------------------------------------------------
+* \fn aa_case_3
+---------------------------------------------------------------------------- */
+static float aa_case_3( float p0, float p1, float p2, float p3 )
+{
+  assert( 0.f <= p0 );
+  assert( p1 < 0.f );
+  assert( p2 < 0.f );
+  assert( 0.f <= p3 );
+
+  return aa_case_1( p1, p3, p0 ) + aa_case_1( p2, p0, p3 );
+}
+/** ---------------------------------------------------------------------------
+* \fn aa_case_4
+---------------------------------------------------------------------------- */
+static float aa_case_4( float p0, float p1, float p2, float p3, float p4 )
+{
+  float rr;
+
+  assert( 0 <= p0 );
+  assert( 0 <= p1 );
+  assert( 0 <= p2 );
+  assert( 0 <= p3 );
+
+  if( p4 < 0.f )
+    {
+      float s0 = p4 / ( p4 - p0 );
+      float s1 = p4 / ( p4 - p1 );
+      float s2 = p4 / ( p4 - p2 );
+      float s3 = p4 / ( p4 - p3 );
+
+      float r1 = 0.25f * ( s0 + s1 + s2 + s3 );
+
+      rr = r1 * r1;
+    }
+  else rr = 0.f;
+
+  return rr;
+}
+/** ---------------------------------------------------------------------------
+* \fn compute_aa_pixel
+* \description Given one or more ovals, compute the contribution.  The approach
+*   here is to compute the signed distance for each oval at each corner and
+*   then handle each case.
+---------------------------------------------------------------------------- */
+static float compute_aa_pixel( const std::vector< const ovalRecord*>& aalist, float xx, float yy )
+{
+  float farr = hypot( aalist.back()->radiusx, aalist.back()->radiusy );
+  float p0 = farr;
+  float p1 = farr;
+  float p2 = farr;
+  float p3 = farr;
+
+  //    p0 --- p2
+  //    |   p4  |
+  //    p1 --- p3
+
+  for( const auto& one : aalist )
+    {
+      p0 = std::min( p0, compute_sdf( one, xx, yy ) );
+      p1 = std::min( p1, compute_sdf( one, xx, yy + 1.f ) );
+      p2 = std::min( p2, compute_sdf( one, xx + 1.f, yy ) );
+      p3 = std::min( p3, compute_sdf( one, xx + 1.f, yy + 1.f ) );
+    }
+
+  int which = 0x0;
+
+  if( p0 < 0.f ) which |= 0x01;
+  if( p1 < 0.f ) which |= 0x02;
+  if( p2 < 0.f ) which |= 0x04;
+  if( p3 < 0.f ) which |= 0x08;
+
+  // There are 16 possibilities that map to four distinct cases
+
+  float rr = 0.f;
+
+  if( which == 0x0 or which == 0xF )
+    {
+      float p4 = farr;    // only if needed
+
+      for( const auto& one : aalist )
+        {
+          p4 = std::min( p4, compute_sdf( one, xx + 0.5f, yy + 0.5f ) );
+        }
+
+      if( which == 0x0 )
+        {
+          rr = aa_case_4( p0, p1, p2, p3, p4 );
+        }
+      else
+        {
+          rr = 1.f - aa_case_4( -p0, -p1, -p2, -p3, -p4 );
+        }
+    }
+
+  switch( which )
+    {
+      case 0x1:  rr = aa_case_1( p0, p1, p2 );  break;
+      case 0x2:  rr = aa_case_1( p1, p3, p0 );  break;
+      case 0x3:  rr = aa_case_2( p0, p1, p2, p3 );  break;
+      case 0x4:  rr = aa_case_1( p2, p0, p3 );  break;
+      case 0x5:  rr = aa_case_2( p2, p0, p3, p1 );  break;
+      case 0x6:  rr = aa_case_3( p0, p1, p2, p3 );  break;
+      case 0x7:  rr = 1.f - aa_case_1( -p3, -p2, -p1 ); break;
+      case 0x8:  rr = aa_case_1( p3, p2, p1 );  break;
+      case 0x9:  rr = aa_case_3( p1, p3, p0, p2 );  break;
+      case 0xA:  rr = aa_case_2( p1, p3, p0, p2 );  break;
+      case 0xB:  rr = 1.f - aa_case_1( -p2, -p0, -p3 ); break;
+      case 0xC:  rr = aa_case_2( p3, p2, p1, p0 );  break;
+      case 0xD:  rr = 1.f - aa_case_1( -p1, -p3, -p0 ); break;
+      case 0xE:  rr = 1.f - aa_case_1( -p0, -p1, -p2 ); break;
+    }
+
+  return rr;
+}
+/** ---------------------------------------------------------------------------
 * \fn computeEdgeList
+* \description For a given scan line value (scanY) find all intersecting ovals
+*     and create an edgelist that can be scanned.
 ---------------------------------------------------------------------------- */
 static int computeEdgeList( int scanY,
                             const std::vector<ovalRecord>& ol,
                             const std::vector<floatBounds>& blist,
+                            const floatBounds& bounds,
                             std::vector<edgeRecord> *edgeList )
 {
-  int nextY = scanY + 1;
-
   float topY = scanY;
   float bottomY = topY + 1.f;
+
+  float nextY = bounds.bottom;
 
   for( int ii = 0; ii < blist.size(); ii += 1 )
     {
       if( intervals_intersect( blist[ ii ].top, blist[ ii ].bottom, topY, bottomY ) )
         {
+          float topx[ 2 ];
+          float botx[ 2 ];
+
+          int num_top = compute_oval_roots( topx, topY, ol[ ii ] );
+          int num_bot = compute_oval_roots( botx, bottomY, ol[ ii ] );
+
+          if( num_top == 2 and num_bot == 2 )   // the most common case
+            {
+              edgeRecord er1, er2;
+
+              er1.set_span( topx[ 0 ], botx[ 0 ] );
+              er2.set_span( topx[ 1 ], botx[ 1 ] );
+
+              er1.edgeType = edgeRecord::falling;
+              er2.edgeType = edgeRecord::rising;
+              er1.oval = & ol[ ii ];
+              er2.oval = & ol[ ii ];
+
+              edgeList->push_back( er1 );
+              edgeList->push_back( er2 );
+            }
+          else if( num_top == 2 )   // num_bottom is either zero or one
+            {
+              float lowx;
+
+              if( num_bot == 1 )
+                lowx = botx[ 0 ];
+              else
+                lowx = 0.5f * ( topx[ 0 ] + topx[ 1 ] );
+
+              edgeList->push_back( {
+                .startx = (int) floor( topx[ 0 ] ),
+                .endx = (int) ceil( lowx ),
+                .edgeType = edgeRecord::falling,
+                .oval = & ol[ ii ]
+              });
+
+              edgeList->push_back( {
+                .startx = (int) floor( lowx ),
+                .endx = (int) ceil( topx[ 1 ] ),
+                .edgeType = edgeRecord::rising,
+                .oval = & ol[ ii ]
+              });
+            }
+          else if( num_bot == 2 )   // then num_top is either zero or one
+            {
+              float hix;
+
+              if( num_top == 1 )
+                hix = topx[ 0 ];
+              else
+                hix = 0.5f * ( botx[ 0 ] + botx[ 1 ] );
+
+              edgeList->push_back( {
+                .startx = (int) floor( botx[ 0 ] ),
+                .endx = (int) ceil( hix ),
+                .edgeType = edgeRecord::falling,
+                .oval = & ol[ ii ]
+              });
+
+              edgeList->push_back( {
+                .startx = (int) floor( hix ),
+                .endx = (int) ceil( botx[ 1 ] ),
+                .edgeType = edgeRecord::rising,
+                .oval = & ol[ ii ]
+              });
+            }
+          else  // The remaining cases are all pathological - we use the bounds
+            {
+              float midx = 0.5f * ( blist[ ii ].left + blist[ ii ].right );
+
+              edgeList->push_back( {
+                .startx = (int) floor( blist[ ii ].left ),
+                .endx = (int) ceil( midx ),
+                .edgeType = edgeRecord::falling,
+                .oval = & ol[ ii ]
+              });
+
+              edgeList->push_back( {
+                .startx = (int) floor( midx ),
+                .endx = (int) ceil( blist[ ii ].right ),
+                .edgeType = edgeRecord::rising,
+                .oval = & ol[ ii ]
+                });
+            }
+        }
+      else
+        {
+          if( bottomY < blist[ ii ].top and  // the bounds are after this scanline
+              blist[ ii ].top < nextY )      // but closer than the previous top candidate
+            {
+              nextY = blist[ ii ].top;
+            }
         }
     }
 
-  return nextY;
+  int next_scanY;
+
+  if( not edgeList->empty() )
+    {
+      next_scanY = scanY + 1;
+    }
+  else  // the edgelist is empty, nothing intersected our span
+    {
+      next_scanY = (int) ceil( nextY );
+    }
+
+  return next_scanY;
 }
 /** ---------------------------------------------------------------------------
 * \fn ovalListToRaster
@@ -162,11 +465,12 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
         {
           floatBounds one = computeBounds( ol[ ii ] );
           bounds.add( one );
-          blist.push_back( std::move( one ) );
+          blist.push_back( one );
         }
 
       int topY = (int)std::max( 0.f, bounds.top );
       int endY = (int)std::min( (float)height, std::ceil( bounds.bottom ) );
+      int right_edge = (int)std::min((float) width, bounds.right );
 
       pixelRun pr;
 
@@ -178,10 +482,71 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
         {
           for( ;; )
             {
-              // For the given scanline find all the edges that are relevant
-              int nextY = computeEdgeList( scanY, ol, blist, &edgeList );
+              pr.lineY = scanY;
 
-              // generate the runs here
+              // For the given scanline find all the edges that are relevant
+              int nextY = computeEdgeList( scanY, ol, blist, bounds, &edgeList );
+
+              if( not edgeList.empty() )
+                {
+                  std::sort( edgeList.begin(), edgeList.end() );
+
+                  std::vector< const ovalRecord *> aalist;    // for anti-aliased pixels
+
+                  pr.startX = std::max( 0, edgeList[ 0 ].startx );
+
+                  do
+                    {
+                      int inside = 0;
+
+                      pr.endX = right_edge;
+
+                      // For each value of x, we need to go through the list of edges
+                      // and collect the oval edges that would need to be evaluated there
+
+                      for( const auto& edge : edgeList )
+                        {
+                          if( edge.startx <= pr.startX )
+                            {
+                              if( edge.edgeType == edgeRecord::falling )
+                                inside += 1;
+                              else
+                                inside -= 1;
+
+                              // Check if we are in the portion that needs to be anti-aliased
+                              if( edge.startx <= pr.startX and pr.startX < edge.endx )
+                                {
+                                  aalist.push_back( edge.oval );
+                                }
+                            }
+                          else  // this edge is to the right of our current scan point
+                            {
+                              pr.endX = std::min( edge.startx, right_edge );
+                              break;
+                            }
+                        }
+
+                      if( aalist.empty() )
+                        {
+                          if( inside )
+                            {
+                              pr.value = 1.f;   // a solid run
+                              rr.push_back( pr );
+                            }
+                        }
+                      else
+                        {
+                          pr.endX = pr.startX + 1;
+                          pr.value = compute_aa_pixel( aalist, pr.startX, pr.lineY );
+
+                          rr.push_back( pr );
+                          aalist.resize(0);
+                        }
+
+                      pr.startX = pr.endX;
+
+                    } while( pr.startX < right_edge );
+                }
 
               if( nextY < endY )
                 {
@@ -199,6 +564,7 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
  * ---------------------------TEST CASES --------------------------------------
 ---------------------------------------------------------------------------- */
 #ifdef TESTING
+TEST_SUITE_BEGIN( "OvalRasterizer_UnitTests");
 TEST_CASE( "AddBounds" )
 {
   floatBounds r1{ 10.f, 20.f, 30.f, 40.f };
@@ -268,7 +634,7 @@ TEST_CASE( "Compute Roots" )
 
   int num_roots = compute_oval_roots( xx, 6.f, oval );    // above the center
   CHECK( num_roots == 2 );
-  CHECK( xx[ 0 ] == doctest::Approx( 6.464482f ) );
+  CHECK( xx[ 0 ] == doctest::Approx(  6.464482f ) );
   CHECK( xx[ 1 ] == doctest::Approx( 12.975518f ) );
 
   float dx_above = xx[ 1 ] - xx[ 0 ];
@@ -276,15 +642,15 @@ TEST_CASE( "Compute Roots" )
   num_roots = compute_oval_roots( xx, 4.f, oval );        // below the center
   CHECK( num_roots == 2 );
   CHECK( xx[ 0 ] < xx[ 1 ] );
-  CHECK( xx[ 0 ] == doctest::Approx( 7.02448f ) );
-  CHECK( xx[ 1 ] == doctest::Approx( 13.5355f ) );
+  CHECK( xx[ 0 ] == doctest::Approx(  7.024482f ) );
+  CHECK( xx[ 1 ] == doctest::Approx( 13.535518f ) );
 
   float dx_below = xx[ 1 ] - xx[ 0 ];
 
   // Since we test one line line above and one line below the center of the
   // oval, we expect the distance between the roots to be the same
 
-  CHECK( ( dx_above - dx_below ) == doctest::Approx( 0 ) );
+  CHECK( ( dx_above - dx_below ) == doctest::Approx( 0.f ) );
 
   oval.angle = 0.f;   // rest the angle to check for one root
   num_roots = compute_oval_roots( xx, 1., oval );
@@ -292,12 +658,73 @@ TEST_CASE( "Compute Roots" )
   CHECK( xx[ 0 ] < xx[ 1 ] );
   CHECK( xx[ 0 ] == doctest::Approx( 10.f ) );
 
+  // Test above and below the oval to confirm that no roots can be found there
+
   num_roots = compute_oval_roots( xx, 0.f, oval );  // below
-  CHECK( num_roots == 0.f );
+  CHECK( num_roots == 0 );
 
   num_roots = compute_oval_roots( xx, 10.f, oval );   // above
-  CHECK( num_roots == 0.f );
-
+  CHECK( num_roots == 0 );
 }
+TEST_CASE("edgeRecord_sort")
+{
+  std::vector< edgeRecord > edgeList;
+
+  edgeRecord one{ .startx = 10, .endx = 11, .edgeType = edgeRecord::falling, .oval = nullptr };
+  edgeRecord two{ .startx = 20, .endx = 21, .edgeType = edgeRecord::falling, .oval = nullptr };
+  edgeRecord three{ .startx = 30, .endx = 31, .edgeType = edgeRecord::falling, .oval = nullptr };
+
+  CHECK( one < two );
+  CHECK( two < three );
+  CHECK( one < three );
+
+  edgeList.push_back( three );
+  edgeList.push_back( two );
+  edgeList.push_back( one );
+
+  std::sort( edgeList.begin(), edgeList.end() );
+
+  CHECK( edgeList[ 0 ] < edgeList[ 1 ] );
+  CHECK( edgeList[ 1 ] < edgeList[ 2 ] );
+}
+TEST_CASE("edgeRecord_set_span")
+{
+  edgeRecord er;
+
+  er.set_span( 1.5, 2.5 );
+
+  CHECK( er.startx == 1 );
+  CHECK( er.endx == 3 );
+
+  er.set_span( 2.5, 1.5 );
+
+  CHECK( er.startx == 1 );
+  CHECK( er.endx == 3 );
+}
+TEST_CASE("compute_sdf")
+{
+  ovalRecord oval{ 10.f, 20.f, 3.f, 4.f, M_PI_2 };
+
+  CHECK( compute_sdf( & oval, 10.f, 20.f ) == -3.f );
+  CHECK( compute_sdf( & oval, 10.f, 0.f ) == doctest::Approx( 17.f ) );
+  CHECK( compute_sdf( & oval, 0.f, 20.f ) == doctest::Approx( 6.f ) );
+  CHECK( compute_sdf( & oval, 8.f, 20.f ) == doctest::Approx( -2.f ) );
+}
+TEST_CASE("AA_Case_Tests")
+{
+  CHECK( aa_case_1( -1.f, 0.f, 0.f ) == doctest::Approx( .5f ) );
+  CHECK( aa_case_1( -1.f, 1.f, 1.f ) == doctest::Approx( 0.125f ) );
+
+  CHECK( aa_case_2( -1.f, -1.f, 0.f, 0.f ) == doctest::Approx( 1.f ) );
+  CHECK( aa_case_2( -1.f, -1.f, 1.f, 1.f ) == doctest::Approx( 0.5f ) );
+
+  CHECK( aa_case_3( 0.f, -1.f, -1.f, 0.f ) == doctest::Approx( 1.f ) );
+  CHECK( aa_case_3( 1.f, -1.f, -1.f, 1.f ) == doctest::Approx( 0.25f ) );
+
+  CHECK( aa_case_4( 1.f, 1.f, 1.f, 1.f, 0.f ) == doctest::Approx( 0.f ) );
+  CHECK( aa_case_4( 1.f, 1.f, 1.f, 1.f, -1.f ) == doctest::Approx( 0.25f ) );
+  CHECK( aa_case_4( 0.f, 0.f, 0.f, 0.f, -1.f ) == doctest::Approx( 1.0f ) );
+}
+TEST_SUITE_END();
 #endif
 
