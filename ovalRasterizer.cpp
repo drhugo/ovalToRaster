@@ -514,6 +514,8 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
 
                   if( pr.startX < right_edge )
                     {
+                      int last_inside = 0;
+
                       do
                         {
                           int inside = 0;
@@ -565,7 +567,7 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
                             }
                           else
                             {
-                              if( inside == 1 )
+                              if( inside == 1 or ( 1 < inside and last_inside == 0 ) )
                                 {
                                   pr.endX = pr.startX + 1;
                                   pr.value = compute_aa_pixel( aalist, pr.startX, pr.lineY );
@@ -584,6 +586,7 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
                             }
 
                           pr.startX = pr.endX;
+                          last_inside = inside;
 
                         }  while( pr.startX < right_edge );
                     }

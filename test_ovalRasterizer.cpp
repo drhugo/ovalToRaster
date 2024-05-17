@@ -89,22 +89,24 @@ TEST_CASE("Four Tiny Ovals")
 
   auto rr = ovalListToRaster( ovalList, 10, 10 );
 
-  REQUIRE( rr.size() == 7 );
+  REQUIRE( rr.size() == 8 );
   CHECK( rr[ 0 ].lineY == 2 );
   CHECK( rr[ 3 ].lineY == 3 );
-  CHECK( rr[ 4 ].lineY == 4 );
+  CHECK( rr[ 5 ].lineY == 4 );
 
-  CHECK( rr[ 3 ].startX == 2 );
-  CHECK( rr[ 3 ].endX == 5 );
+  CHECK( rr[ 4 ].startX == 3 );
+  CHECK( rr[ 4 ].endX == 5 );
 
   CHECK( rr[ 0 ].value == doctest::Approx( 0.0857864245f ) );
   CHECK( rr[ 1 ].value == doctest::Approx( 1.f ) );
   CHECK( rr[ 2 ].value == doctest::Approx( 0.0857864245f ) );
-  CHECK( rr[ 3 ].value == doctest::Approx( 1.f ) );
-  CHECK( rr[ 4 ].value == doctest::Approx( 0.0857864245f ) );
-  CHECK( rr[ 5 ].value == doctest::Approx( 1.f ) );
-  CHECK( rr[ 6 ].value == doctest::Approx( 0.0857864245f ) );
 
+  CHECK( rr[ 3 ].value == doctest::Approx( 0.414213538f ) );
+  CHECK( rr[ 4 ].value == doctest::Approx( 1.f ) );
+
+  CHECK( rr[ 5 ].value == doctest::Approx( 0.0857864245f ) );
+  CHECK( rr[ 6 ].value == doctest::Approx( 1.f ) );
+  CHECK( rr[ 7 ].value == doctest::Approx( 0.0857864245f ) );
 }
 TEST_CASE("Clipped Oval")
 {
