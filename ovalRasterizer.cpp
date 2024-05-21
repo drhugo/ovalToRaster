@@ -6,8 +6,11 @@
 ---------------------------------------------------------------------------- */
 
 #include "ovalRasterizer.h"
-#include <cmath>
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <iso646.h>
+#include <set>
 
 #ifdef TESTING
 #include <doctest/doctest.h>
@@ -58,6 +61,29 @@ struct edgeRecord
     }
   };
 
+struct overlapRecord
+  {
+    int index;
+    floatBounds bounds;
+
+    bool operator<( const struct overlapRecord& other ) const
+    {
+      bool is_less = true;
+      if( other.bounds.left <= bounds.left )
+        {
+          if( other.bounds.left == bounds.left )
+            {
+              if( other.bounds.top <= bounds.top )
+                {
+                  is_less = false;
+                }
+            }
+          else is_less = false;
+        }
+      return is_less;
+    }
+  };
+
 /** ---------------------------------------------------------------------------
 * \fn computeBounds
 * \description This function compute the bounds of a rotated oval.
@@ -92,6 +118,29 @@ static floatBounds computeBounds( const ovalRecord& oval )
 static bool intervals_intersect( float a1, float a2, float b1, float b2 )
 {
   return ( a1 < a2 ) and ( not ( a2 < b1 or b2 < a1 ) );
+}
+/** ---------------------------------------------------------------------------
+* \fn computeOverlap
+* \description Determine whether two bounding boxes overlap, and if so, by
+*     how much.
+---------------------------------------------------------------------------- */
+bool computeOverlap( const floatBounds& one, const floatBounds& two, float *area_one, float *area_two )
+{
+  bool overlap = false;
+
+  float ww_span = std::min( one.right, two.right ) - std::max( one.left, two.left );
+  float hh_span = std::min( one.bottom, two.bottom ) - std::max( one.top, two.top );
+
+  if( 0.f < ww_span and 0.f < hh_span )
+    {
+      float overlap_area = ww_span * hh_span;
+
+      *area_one = overlap_area / ( ( one.right - one.left ) * ( one.bottom - one.top ) );
+      *area_two = overlap_area / ( ( two.right - two.left ) * ( two.bottom - two.top ) );
+      overlap = true;
+    }
+
+  return overlap;
 }
 /** ---------------------------------------------------------------------------
 * \fn compute_oval_roots
@@ -605,6 +654,76 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
   return rr;
 }
 /** ---------------------------------------------------------------------------
+* \fn deduplicateOvalList
+---------------------------------------------------------------------------- */
+int deduplicateOvalList( std::vector< ovalRecord >& ovalList, float cover_limit )
+{
+  int num_removed = 0;
+
+  if( 1 < ovalList.size() and 0.f < cover_limit )
+    {
+      std::vector< overlapRecord > xlist;
+      xlist.reserve( ovalList.size() );
+
+      int ii = 0;
+      for(; ii < ovalList.size(); ii += 1 )
+        {
+          xlist.push_back( { ii, computeBounds( ovalList[ ii ] ) } );
+        }
+      std::sort( xlist.begin(), xlist.end() );
+      std::set< int > skips;
+      for( int jj = 0; jj < xlist.size(); jj += 1 )
+        {
+          if( skips.count( jj ) == 0 )    // if we haven't deleted this one
+            {
+              for( ii = jj + 1; ii < xlist.size(); ii += 1 )
+                {
+                  if( skips.count( ii ) == 0 )    // we haven't deleted this one
+                    {
+                      if( xlist[ ii ].bounds.left < xlist[ jj ].bounds.right )
+                        {
+                          float cover_jj, cover_ii;
+
+                          if( computeOverlap( xlist[ jj ].bounds, xlist[ ii ].bounds,
+                                & cover_jj, & cover_ii ) )
+                            {
+                              if( cover_jj <= cover_ii and cover_limit <= cover_ii )
+                                {
+                                  skips.insert( ii );
+                                }
+                              else if( cover_ii < cover_jj and cover_limit <= cover_jj )
+                                {
+                                  skips.insert( jj );
+                                  break;    // we removed the pivot, so skip to the next
+                                }
+                            }
+                        }
+                      else break;   // the remaining rectangles are to the right
+                    }
+                }
+            }
+        }
+
+      if( not skips.empty() )
+        {
+          std::vector< ovalRecord > updatedList;
+
+          for( ii = 0; ii < ovalList.size(); ii += 1 )
+            {
+              if( skips.count( ii ) == 0 )    // don't skip this one
+                {
+                  updatedList.push_back( ovalList[ xlist[ ii ].index ] );
+                }
+            }
+
+          ovalList.swap( updatedList );
+          num_removed = skips.size();
+        }
+    }
+
+  return num_removed;
+}
+/** ---------------------------------------------------------------------------
  * ---------------------------TEST CASES --------------------------------------
 ---------------------------------------------------------------------------- */
 #ifdef TESTING
@@ -782,6 +901,45 @@ TEST_CASE( "Merge and Push Runs")
   push_or_merge_run( runList, {102, 220, 230, .9f} );
   CHECK( runList.size() == 3 );
   CHECK( runList.back().endX == 230 );
+}
+TEST_CASE( "CompareOverlapRecords")
+{
+  overlapRecord one { 1, { 10.f, 20.f, 50.f, 60.f } };
+  overlapRecord two { 2, { 15.f, 25.f, 55.f, 65.f } };
+
+  overlapRecord three{ 3, { 10.f, 25.f, 50.f, 60.f } };
+  overlapRecord four{ 4, { 10.f, 20.f, 45.f, 65.f } };
+
+  CHECK( one < two );         // trivial case
+  CHECK( ! ( two < one ) );   // reverse
+  CHECK( one < three );       // left edge is aligned
+  CHECK( ! ( three < one ) ); // reverse
+
+  CHECK( ! ( one < four ) );  // left and top match, not strictly less
+  CHECK( ! ( four < one ) );
+}
+TEST_CASE( "ComputeOverlap")
+{
+  floatBounds one{ 10.f, 10.f, 20.f, 20.f };
+  floatBounds two{  15.f, 15.f, 25.f, 25.f };
+
+  floatBounds three{ 30.f, 10.f, 40.f, 20.f };    // to the right
+  floatBounds four{ 10.f, 30.f, 20.f, 40.f };     // below
+
+  floatBounds five{ 10.f, 15.f, 20.f, 20.f };     // contained
+
+  float area_one, area_two;
+
+  REQUIRE( computeOverlap( one, two, & area_one, & area_two ) );
+  CHECK( area_one == doctest::Approx( 0.25f ) );
+  CHECK( area_two == doctest::Approx( 0.25f ) );
+
+  CHECK( computeOverlap( one, three, & area_one, & area_two ) == false );
+  CHECK( computeOverlap( one, four, & area_one, & area_two ) == false );
+
+  REQUIRE( computeOverlap( one, five, & area_one, & area_two ) );
+  CHECK( area_one == doctest::Approx( 0.5f ) );
+  CHECK( area_two == doctest::Approx( 1.f ) );
 }
 TEST_SUITE_END();
 #endif

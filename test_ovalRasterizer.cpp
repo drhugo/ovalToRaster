@@ -114,13 +114,79 @@ TEST_CASE("Clipped Oval")
 
   // these four ovals are outside the frame buffer
 
-  ovalList.push_back( ovalRecord{ -20.f, 5.5f, 3.f,3.f, 0.f } );
-  ovalList.push_back( ovalRecord{ 20.f, 5.5f, 3.f,3.f, 0.f } );
-  ovalList.push_back( ovalRecord{ 5.f, -20.f, 3.f,3.f, 0.f } );
-  ovalList.push_back( ovalRecord{ 5.f, 20.f, 3.f,3.f, 0.f } );
+  ovalList.push_back( { -20.f, 5.5f, 3.f,3.f, 0.f } );
+  ovalList.push_back( { 20.f, 5.5f, 3.f,3.f, 0.f } );
+  ovalList.push_back( { 5.f, -20.f, 3.f,3.f, 0.f } );
+  ovalList.push_back( { 5.f, 20.f, 3.f,3.f, 0.f } );
 
   auto rr = ovalListToRaster( ovalList, 10, 10 );
 
   CHECK( rr.empty() );    // The circle is completely to the left
+}
+TEST_CASE("Deduplicate Zero Output")
+{
+  std::vector< ovalRecord > ovalList;
+
+  REQUIRE( deduplicateOvalList( ovalList ) == 0 );    // check empty
+
+  ovalList.push_back( { 100.f, 100.f, 25.f, 25.f, 0.f } );
+
+  REQUIRE( deduplicateOvalList( ovalList ) == 0 );    // check with just one
+
+  ovalList.push_back( { 200.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 300.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 400.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 500.f, 100.f, 25.f, 25.f, 0.f } );
+
+  CHECK( deduplicateOvalList( ovalList ) == 0 );    // all non-overlapping
+
+  ovalList.clear();
+
+  ovalList.push_back( { 100.f, 100.f, 10.f, 10.f, 0.f } );
+  ovalList.push_back( { 100.f, 100.f, 10.f, 10.f, 0.f } );  // two of the same
+
+  CHECK( deduplicateOvalList( ovalList, 0.f ) == 0 );    // cover_limit == 0.f
+}
+TEST_CASE("Deduplicate Remove Cases")
+{
+  std::vector< ovalRecord > ovalList;
+
+  ovalList.push_back( { 200.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 300.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 400.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 500.f, 100.f, 25.f, 25.f, 0.f } );
+
+  // add exact duplicates of the above
+  ovalList.push_back( { 200.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 300.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 400.f, 100.f, 25.f, 25.f, 0.f } );
+  ovalList.push_back( { 500.f, 100.f, 25.f, 25.f, 0.f } );
+
+  CHECK( deduplicateOvalList( ovalList ) == 4 );
+}
+TEST_CASE("Deduplicate Edge Cases")
+{
+  std::vector< ovalRecord > ovalList;
+
+  ovalList.push_back( { 100.f, 300.f, 10.f, 10.f, 0.f } );
+  ovalList.push_back( { 200.f, 100.f, 20.f, 20.f, 0.f } );
+  ovalList.push_back( { 200.f, 100.f, 25.f, 25.f, 0.f } );
+
+  REQUIRE( deduplicateOvalList( ovalList ) == 1 );
+  CHECK( ovalList[ 1 ].radiusx == 25.f );
+  CHECK( ovalList[ 1 ].radiusy == 25.f );
+}
+TEST_CASE("Deduplicate Pivot")
+{
+  std::vector< ovalRecord > ovalList;
+
+  // test the case where the leftmost oval is removed
+  ovalList.push_back( { 100.f, 100.f, 20.f, 20.f, 0.f } );
+  ovalList.push_back( { 121.f, 101.f, 40.f, 20.f, 0.f } );
+  ovalList.push_back( { 200.f, 100.f, 25.f, 25.f, 0.f } );
+
+  REQUIRE( deduplicateOvalList( ovalList ) == 1 );
+  CHECK( ovalList[ 0 ].radiusx == 40.f );
+  CHECK( ovalList[ 0 ].radiusy == 20.f );
 }
 TEST_SUITE_END();

@@ -34,4 +34,15 @@ struct pixelRun
 /// \returns a list of pixel runs.  The method will throw if there is an error.
 std::vector< pixelRun > ovalListToRaster( const std::vector< ovalRecord >& ol, int width, int height );
 
+/// \fn deduplicateOvalList
+/// \description This routine will remove ovals that ovelap by more than 90%
+///     when drawn.  When deciding which oval to remove, the routine will
+///     remove the smaller of the two.
+///  \param ol A referece to a mutable list of ovals that will be deduplicated
+///  \param cover_limit A value between greater than 0 and less than 1. that
+///      specifies the limit above which an oval should be removed from the
+///      list.
+/// \returns The number of ovals that were removed
+int deduplicateOvalList( std::vector< ovalRecord >& ol, float cover_limit = .95f );
+
 #endif //OVALRASTERIZER_H
