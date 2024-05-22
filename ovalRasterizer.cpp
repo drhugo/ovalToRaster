@@ -418,17 +418,17 @@ static int computeEdgeList( int scanY,
                 lowx = 0.5f * ( topx[ 0 ] + topx[ 1 ] );
 
               edgeList->push_back( {
-                .startx = (int) floor( topx[ 0 ] ),
-                .endx = (int) ceil( lowx ),
-                .edgeType = edgeRecord::falling,
-                .oval = & ol[ ii ]
+                (int) floor( topx[ 0 ] ),
+                (int) ceil( lowx ),
+                edgeRecord::falling,
+                & ol[ ii ]
               });
 
               edgeList->push_back( {
-                .startx = (int) floor( lowx ),
-                .endx = (int) ceil( topx[ 1 ] ),
-                .edgeType = edgeRecord::rising,
-                .oval = & ol[ ii ]
+                (int) floor( lowx ),
+                (int) ceil( topx[ 1 ] ),
+                edgeRecord::rising,
+                & ol[ ii ]
               });
             }
           else if( num_bot == 2 )   // then num_top is either zero or one
@@ -441,17 +441,17 @@ static int computeEdgeList( int scanY,
                 hix = 0.5f * ( botx[ 0 ] + botx[ 1 ] );
 
               edgeList->push_back( {
-                .startx = (int) floor( botx[ 0 ] ),
-                .endx = (int) ceil( hix ),
-                .edgeType = edgeRecord::falling,
-                .oval = & ol[ ii ]
+                (int) floor( botx[ 0 ] ),
+                (int) ceil( hix ),
+                edgeRecord::falling,
+                & ol[ ii ]
               });
 
               edgeList->push_back( {
-                .startx = (int) floor( hix ),
-                .endx = (int) ceil( botx[ 1 ] ),
-                .edgeType = edgeRecord::rising,
-                .oval = & ol[ ii ]
+                (int) floor( hix ),
+                (int) ceil( botx[ 1 ] ),
+                edgeRecord::rising,
+                & ol[ ii ]
               });
             }
           else  // The remaining cases are all pathological - we use the bounds
@@ -459,17 +459,17 @@ static int computeEdgeList( int scanY,
               float midx = 0.5f * ( blist[ ii ].left + blist[ ii ].right );
 
               edgeList->push_back( {
-                .startx = (int) floor( blist[ ii ].left ),
-                .endx = (int) ceil( midx ),
-                .edgeType = edgeRecord::falling,
-                .oval = & ol[ ii ]
+                (int) floor( blist[ ii ].left ),
+                (int) ceil( midx ),
+                edgeRecord::falling,
+                & ol[ ii ]
               });
 
               edgeList->push_back( {
-                .startx = (int) floor( midx ),
-                .endx = (int) ceil( blist[ ii ].right ),
-                .edgeType = edgeRecord::rising,
-                .oval = & ol[ ii ]
+                (int) floor( midx ),
+                (int) ceil( blist[ ii ].right ),
+                edgeRecord::rising,
+                & ol[ ii ]
                 });
             }
         }
@@ -911,12 +911,12 @@ TEST_CASE( "CompareOverlapRecords")
   overlapRecord four{ 4, { 10.f, 20.f, 45.f, 65.f } };
 
   CHECK( one < two );         // trivial case
-  CHECK( ! ( two < one ) );   // reverse
+  CHECK( not ( two < one ) );   // reverse
   CHECK( one < three );       // left edge is aligned
-  CHECK( ! ( three < one ) ); // reverse
+  CHECK( not ( three < one ) ); // reverse
 
-  CHECK( ! ( one < four ) );  // left and top match, not strictly less
-  CHECK( ! ( four < one ) );
+  CHECK( not ( one < four ) );  // left and top match, not strictly less
+  CHECK( not ( four < one ) );
 }
 TEST_CASE( "ComputeOverlap")
 {
