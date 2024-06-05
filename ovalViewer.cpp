@@ -2,6 +2,7 @@
 // Created by Hugo Ayala on 5/16/24.
 //
 
+#include <QAction>
 #include <QMouseEvent>
 #include <QPainter>
 
@@ -46,6 +47,86 @@ static float compute_sdf( const ovalRecord *oval, float xx, float yy )
 ovalViewer::ovalViewer( QWidget *parent ) : QWidget( parent ), cmd_( nullptr ), scale_( 10 )
 {
   setFocusPolicy( Qt::StrongFocus );
+
+  QAction *dumpRenderXn = new QAction( QString( "Dump Render" ), this );
+  dumpRenderXn->setShortcut( QString( "Ctrl+d" ) );
+  connect( dumpRenderXn, SIGNAL( triggered(bool) ), this, SLOT( dumpOvalRender() ) );
+
+
+  QAction *clearOvalsXn = new QAction( QString( "Reset Oval" ), this );
+  clearOvalsXn->setShortcut( QString( "Ctrl+r" ) );
+  connect( clearOvalsXn, SIGNAL( triggered(bool) ), this, SLOT( clearOvals() ) );
+
+  addAction( dumpRenderXn );
+  addAction( clearOvalsXn );
+}
+/** ----------------------------------------------------------------------------
+  \fn ovalViewer::renderOnePixel
+---------------------------------------------------------------------------- */
+void ovalViewer::renderOnePixel( const QPoint& where )
+{
+  float xpos = floor( where.x() / scale_ );
+  float ypos = floor( where.y() / scale_ );
+
+  std::vector< ovalRecord > shifted;
+  for( const auto& one : ovalList_ )
+    {
+      shifted.push_back( { one.centerx - xpos, one.centery - ypos, one.radiusx, one.radiusy, one.angle } );
+    }
+
+  auto rr = ovalListToRaster( shifted, 1, 1 );
+
+  if( rr.size() == 1 )
+    {
+      msg_ = QString( "ypos: %1, startx: %2, endx: %3, value: %4" )
+          .arg( ypos + rr[ 0 ].lineY )
+          .arg( xpos + rr[ 0 ].startX )
+          .arg( xpos + rr[ 0 ].endX )
+          .arg( rr[ 0 ].value );
+    }
+  else
+    {
+      msg_ = QString( "Returned %1 runs" ).arg( rr.size() );
+    }
+
+  update();
+}
+/** ----------------------------------------------------------------------------
+  \fn ovalViewer::paintEvent
+---------------------------------------------------------------------------- */
+void ovalViewer::dumpOvalRender()
+{
+  if( not ovalList_.empty() )
+    {
+      int ww = width() / scale_;
+      int hh = height() / scale_;
+
+      auto rr = ovalListToRaster( ovalList_, ww, hh );
+
+      int lastY = -1;
+
+      for( const auto& one : rr )
+        {
+          if( one.lineY != lastY )
+            {
+              fprintf( stderr, "\n%d: ", one.lineY );
+              lastY = one.lineY;
+            }
+
+          fprintf( stderr, "[%d-%d (%.2f)]", one.startX, one.endX, one.value );
+        }
+
+      fprintf( stderr, "\n" );
+    }
+}
+/** ----------------------------------------------------------------------------
+  \fn ovalViewer::paintEvent
+---------------------------------------------------------------------------- */
+void ovalViewer::clearOvals()
+{
+  ovalList_.clear();
+  msg_.clear();
+  update();
 }
 /** ----------------------------------------------------------------------------
   \fn ovalViewer::paintEvent
@@ -86,7 +167,13 @@ void ovalViewer::paintEvent( QPaintEvent *event )
               scan[ pi + 3 ] = pp;
             }
         }
-      paint.drawImage( rect(), img );
+
+      paint.drawImage( QRect( 0, 0, ww * scale_, hh * scale_ ), img );
+
+      if( not msg_.isEmpty() )
+        {
+          paint.drawText( QPoint( 15, 40 ), msg_ );
+        }
     }
   else
     {
@@ -107,35 +194,42 @@ void ovalViewer::mousePressEvent( QMouseEvent *event )
           float xx = event->pos().x() / ((float) scale_ );
           float yy = event->pos().y() / ((float) scale_ );
 
-          for( auto& one : ovalList_ )
+          if( event->modifiers() == Qt::AltModifier )
             {
-              if( compute_sdf( & one, xx, yy ) <= 0.f )
+              renderOnePixel( event->pos() );
+            }
+          else  // see if we clicked on an oval
+            {
+              for( auto& one : ovalList_ )
                 {
-                  oval = & one;
-                  break;
+                  if( compute_sdf( & one, xx, yy ) <= 0.f )
+                    {
+                      oval = & one;
+                      break;
+                    }
                 }
-            }
 
-          if( oval )
-            {
-              if( event->modifiers() == Qt::NoModifier )
-                cmd_ = new move_oval_cmd( this, oval, event->pos() );
-              else if( event->modifiers() == Qt::AltModifier )
-                cmd_ = new rotate_oval_cmd( this, oval, event->pos() );
-            }
-          else    // create a new oval
-            {
-              ovalRecord oval;
+              if( oval )
+                {
+                  if( event->modifiers() == Qt::NoModifier )
+                    cmd_ = new move_oval_cmd( this, oval, event->pos() );
+                  else if( event->modifiers() == Qt::ControlModifier )
+                    cmd_ = new rotate_oval_cmd( this, oval, event->pos() );
+                }
+              else    // create a new oval
+                {
+                  ovalRecord oval;
 
-              oval.centerx = event->pos().x() / (float) scale_;
-              oval.centery = event->pos().y() / (float) scale_;
-              oval.radiusx = 0.f;
-              oval.radiusy = 0.f;
-              oval.angle = 0;
+                  oval.centerx = event->pos().x() / (float) scale_;
+                  oval.centery = event->pos().y() / (float) scale_;
+                  oval.radiusx = 0.f;
+                  oval.radiusy = 0.f;
+                  oval.angle = 0;
 
-              ovalList_.push_back( oval );
+                  ovalList_.push_back( oval );
 
-              cmd_ = new new_oval_cmd( this, & ovalList_[ ovalList_.size() - 1 ], event->pos() );
+                  cmd_ = new new_oval_cmd( this, & ovalList_[ ovalList_.size() - 1 ], event->pos() );
+                }
             }
         }
       else

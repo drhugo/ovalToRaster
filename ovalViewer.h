@@ -33,6 +33,10 @@ class ovalViewer : public QWidget
 
       int scale() const { return scale_; }
 
+    public slots:
+      void dumpOvalRender();
+      void clearOvals();
+
     protected:
       void paintEvent( QPaintEvent *event ) override;
 
@@ -40,10 +44,14 @@ class ovalViewer : public QWidget
       void mouseMoveEvent( QMouseEvent *event ) override;
       void mouseReleaseEvent( QMouseEvent *event ) override;
 
+    private:
+      void renderOnePixel( const QPoint& where );
+
       std::vector<ovalRecord> ovalList_;
       mouse_cmd *cmd_;
 
       int scale_;
+      QString msg_;
   };
 /** ----------------------------------------------------------------------------
   \class move_oval_cmd
