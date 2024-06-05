@@ -89,24 +89,41 @@ TEST_CASE("Four Tiny Ovals")
 
   auto rr = ovalListToRaster( ovalList, 10, 10 );
 
-  REQUIRE( rr.size() == 8 );
+    REQUIRE( rr.size() == 9 );
   CHECK( rr[ 0 ].lineY == 2 );
   CHECK( rr[ 3 ].lineY == 3 );
-  CHECK( rr[ 5 ].lineY == 4 );
-
-  CHECK( rr[ 4 ].startX == 3 );
-  CHECK( rr[ 4 ].endX == 5 );
+  CHECK( rr[ 6 ].lineY == 4 );
 
   CHECK( rr[ 0 ].value == doctest::Approx( 0.0857864245f ) );
-  CHECK( rr[ 1 ].value == doctest::Approx( 1.f ) );
+  CHECK( rr[ 1 ].value == doctest::Approx( 0.414213538f ) );
   CHECK( rr[ 2 ].value == doctest::Approx( 0.0857864245f ) );
 
   CHECK( rr[ 3 ].value == doctest::Approx( 0.414213538f ) );
-  CHECK( rr[ 4 ].value == doctest::Approx( 1.f ) );
+  CHECK( rr[ 4 ].value == doctest::Approx( 0.656854272f ) );
+  CHECK( rr[ 5 ].value == doctest::Approx( 0.414213538f ) );
 
-  CHECK( rr[ 5 ].value == doctest::Approx( 0.0857864245f ) );
-  CHECK( rr[ 6 ].value == doctest::Approx( 1.f ) );
-  CHECK( rr[ 7 ].value == doctest::Approx( 0.0857864245f ) );
+  CHECK( rr[ 6 ].value == doctest::Approx( 0.0857864245f ) );
+  CHECK( rr[ 7 ].value == doctest::Approx( 0.414213538f ) );
+  CHECK( rr[ 8 ].value == doctest::Approx( 0.0857864245f ) );
+}
+TEST_CASE( "Case 3 Coverage" )
+{
+  std::vector< ovalRecord > ovalList;
+
+  ovalList.push_back( { 2.f, 2.f, 0.35f, 0.35f, 0.f } );
+  ovalList.push_back( { 3.f, 3.f, 0.35f, 0.35f, 0.f } );
+  ovalList.push_back( { 5.f, 4.f, 0.35f, 0.35f, 0.f } );
+  ovalList.push_back( { 4.f, 5.f, 0.35f, 0.35f, 0.f } );
+
+  auto rr = ovalListToRaster( ovalList, 10, 10 );
+
+  REQUIRE( rr.size() == 9 );
+  CHECK( rr[ 0 ].lineY == 1 );
+  CHECK( rr[ 0 ].startX == 1 );
+  CHECK( rr[ 0 ].endX == 3 );
+  CHECK( rr[ 0 ].value == doctest::Approx( 0.0857864245f ) );
+  CHECK( rr[ 1 ].value == doctest::Approx( 0.0857864245f ) );
+  CHECK( rr[ 2 ].value < 1.f ); // this value should be about twice the above
 }
 TEST_CASE("Clipped Oval")
 {
@@ -123,6 +140,30 @@ TEST_CASE("Clipped Oval")
 
   CHECK( rr.empty() );    // The circle is completely to the left
 }
+TEST_CASE("Concentric Ovals")
+{
+  std::vector< ovalRecord > ovalList;
+
+  ovalList.push_back( { 10.f, 10.f, 8.f,8.f, 0.f } );
+
+  auto r1 = ovalListToRaster( ovalList, 20, 20 );
+
+  ovalList.push_back( { 10.f, 10.f, 3.f,3.f, 0.f } );
+
+  auto r2 = ovalListToRaster( ovalList, 20, 20 );
+
+  REQUIRE( r1.size() == r2.size() );
+
+  for( int ii = 0; ii < r1.size(); ii += 1 )
+    {
+      CHECK( r1[ ii ].lineY  == r2[ ii ].lineY );
+      CHECK( r1[ ii ].startX == r2[ ii ].startX );
+      CHECK( r1[ ii ].endX   == r2[ ii ].endX );
+      CHECK( r1[ ii ].value  == r2[ ii ].value );
+    }
+}
+
+
 TEST_CASE("Deduplicate Zero Output")
 {
   std::vector< ovalRecord > ovalList;

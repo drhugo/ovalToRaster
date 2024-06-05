@@ -37,7 +37,7 @@ struct edgeRecord
     int startx;   /// The leftmost position for this edge for the given scanline
     int endx;     /// The rightmost position for the given scanline
 
-    enum { falling, rising } edgeType;    /// Whether it is a rising or falling edge
+    enum { leading, trailing } edgeType;    /// Whether it is a leading or trailing edge
 
     const ovalRecord *oval;
 
@@ -228,6 +228,10 @@ static float compute_sdf( const ovalRecord *oval, float xx, float yy )
 ---------------------------------------------------------------------------- */
 static float aa_case_1( float p0, float p1, float p2 )
 {
+  //  0--- +    p0 --- p2
+  //  |    |    |      |
+  //  +--- +    p1 --- p3
+
   assert( p0 <= 0.f );
   assert( 0.f <= p1 );
   assert( 0.f <= p2 );
@@ -242,6 +246,10 @@ static float aa_case_1( float p0, float p1, float p2 )
 ---------------------------------------------------------------------------- */
 static float aa_case_2( float p0, float p1, float p2, float p3 )
 {
+  //  0--- +    p0 --- p2
+  //  |    |    |      |
+  //  0--- +    p1 --- p3
+
   assert( p0 < 0.f );
   assert( p1 < 0.f );
   assert( 0.f <= p2 );
@@ -257,6 +265,10 @@ static float aa_case_2( float p0, float p1, float p2, float p3 )
 ---------------------------------------------------------------------------- */
 static float aa_case_3( float p0, float p1, float p2, float p3 )
 {
+  //  +--- 0    p0 --- p2
+  //  |    |    |      |
+  //  0--- +    p1 --- p3
+
   assert( 0.f <= p0 );
   assert( p1 < 0.f );
   assert( p2 < 0.f );
@@ -269,6 +281,10 @@ static float aa_case_3( float p0, float p1, float p2, float p3 )
 ---------------------------------------------------------------------------- */
 static float aa_case_4( float p0, float p1, float p2, float p3, float p4 )
 {
+  //  0--- 0    p0 --- p2
+  //  |  0 |    |  p4  |
+  //  0--- 0    p1 --- p3
+
   float rr;
 
   assert( 0 <= p0 );
@@ -297,9 +313,9 @@ static float aa_case_4( float p0, float p1, float p2, float p3, float p4 )
 *   here is to compute the signed distance for each oval at each corner and
 *   then handle each case.
 ---------------------------------------------------------------------------- */
-static float compute_aa_pixel( const std::vector< const ovalRecord*>& aalist, float xx, float yy )
+static float compute_aa_pixel( const std::set< const ovalRecord*>& aalist, float xx, float yy )
 {
-  float farr = hypot( aalist.back()->radiusx, aalist.back()->radiusy );
+  float farr = hypot( (*aalist.begin())->radiusx, (*aalist.begin())->radiusy );
   float p0 = farr;
   float p1 = farr;
   float p2 = farr;
@@ -346,24 +362,27 @@ static float compute_aa_pixel( const std::vector< const ovalRecord*>& aalist, fl
           rr = 1.f - aa_case_4( -p0, -p1, -p2, -p3, -p4 );
         }
     }
-
-  switch( which )
+  else
     {
-      case 0x1:  rr = aa_case_1( p0, p1, p2 );  break;
-      case 0x2:  rr = aa_case_1( p1, p3, p0 );  break;
-      case 0x3:  rr = aa_case_2( p0, p1, p2, p3 );  break;
-      case 0x4:  rr = aa_case_1( p2, p0, p3 );  break;
-      case 0x5:  rr = aa_case_2( p2, p0, p3, p1 );  break;
-      case 0x6:  rr = aa_case_3( p0, p1, p2, p3 );  break;
-      case 0x7:  rr = 1.f - aa_case_1( -p3, -p2, -p1 ); break;
-      case 0x8:  rr = aa_case_1( p3, p2, p1 );  break;
-      case 0x9:  rr = aa_case_3( p1, p3, p0, p2 );  break;
-      case 0xA:  rr = aa_case_2( p1, p3, p0, p2 );  break;
-      case 0xB:  rr = 1.f - aa_case_1( -p2, -p0, -p3 ); break;
-      case 0xC:  rr = aa_case_2( p3, p2, p1, p0 );  break;
-      case 0xD:  rr = 1.f - aa_case_1( -p1, -p3, -p0 ); break;
-      case 0xE:  rr = 1.f - aa_case_1( -p0, -p1, -p2 ); break;
+      switch( which )
+        {
+          case 0x1:  rr = aa_case_1( p0, p1, p2 );  break;
+          case 0x2:  rr = aa_case_1( p1, p3, p0 );  break;
+          case 0x3:  rr = aa_case_2( p0, p1, p2, p3 );  break;
+          case 0x4:  rr = aa_case_1( p2, p0, p3 );  break;
+          case 0x5:  rr = aa_case_2( p2, p0, p3, p1 );  break;
+          case 0x6:  rr = aa_case_3( p0, p1, p2, p3 );  break;
+          case 0x7:  rr = 1.f - aa_case_1( -p3, -p2, -p1 ); break;
+          case 0x8:  rr = aa_case_1( p3, p2, p1 );  break;
+          case 0x9:  rr = aa_case_3( p1, p3, p0, p2 );  break;
+          case 0xA:  rr = aa_case_2( p1, p3, p0, p2 );  break;
+          case 0xB:  rr = 1.f - aa_case_1( -p2, -p0, -p3 ); break;
+          case 0xC:  rr = aa_case_2( p3, p2, p1, p0 );  break;
+          case 0xD:  rr = 1.f - aa_case_1( -p1, -p3, -p0 ); break;
+          case 0xE:  rr = 1.f - aa_case_1( -p0, -p1, -p2 ); break;
+        }
     }
+
 
   return rr;
 }
@@ -371,6 +390,14 @@ static float compute_aa_pixel( const std::vector< const ovalRecord*>& aalist, fl
 * \fn computeEdgeList
 * \description For a given scan line value (scanY) find all intersecting ovals
 *     and create an edgelist that can be scanned.
+* \param scanY The vertical position of the scanline for which to return
+*     the edge list.
+* \param ol The list of oval that are being rasterized
+* \param blist The list of bounding boxes for the corresponding list of ovals
+* \param bounds The union of all the bounds for all the ovals in the list
+* \param edgeList A place to return the edges that intersect the given Y coordinate
+* \returns An integer that specifies the next scanline that will contain
+*   an edge.
 ---------------------------------------------------------------------------- */
 static int computeEdgeList( int scanY,
                             const std::vector<ovalRecord>& ol,
@@ -391,17 +418,17 @@ static int computeEdgeList( int scanY,
           float botx[ 2 ];
 
           int num_top = compute_oval_roots( topx, topY, ol[ ii ] );
-          int num_bot = compute_oval_roots( botx, bottomY, ol[ ii ] );
+          int num_bottom = compute_oval_roots( botx, bottomY, ol[ ii ] );
 
-          if( num_top == 2 and num_bot == 2 )   // the most common case
+          if( num_top == 2 and num_bottom == 2 )   // the most common case
             {
               edgeRecord er1, er2;
 
               er1.set_span( topx[ 0 ], botx[ 0 ] );
               er2.set_span( topx[ 1 ], botx[ 1 ] );
 
-              er1.edgeType = edgeRecord::falling;
-              er2.edgeType = edgeRecord::rising;
+              er1.edgeType = edgeRecord::leading;
+              er2.edgeType = edgeRecord::trailing;
               er1.oval = & ol[ ii ];
               er2.oval = & ol[ ii ];
 
@@ -412,7 +439,7 @@ static int computeEdgeList( int scanY,
             {
               float lowx;
 
-              if( num_bot == 1 )
+              if( num_bottom == 1 )
                 lowx = botx[ 0 ];
               else
                 lowx = 0.5f * ( topx[ 0 ] + topx[ 1 ] );
@@ -420,18 +447,18 @@ static int computeEdgeList( int scanY,
               edgeList->push_back( {
                 (int) floor( topx[ 0 ] ),
                 (int) ceil( lowx ),
-                edgeRecord::falling,
+                edgeRecord::leading,
                 & ol[ ii ]
               });
 
               edgeList->push_back( {
                 (int) floor( lowx ),
                 (int) ceil( topx[ 1 ] ),
-                edgeRecord::rising,
+                edgeRecord::trailing,
                 & ol[ ii ]
               });
             }
-          else if( num_bot == 2 )   // then num_top is either zero or one
+          else if( num_bottom == 2 )   // then num_top is either zero or one
             {
               float hix;
 
@@ -443,40 +470,52 @@ static int computeEdgeList( int scanY,
               edgeList->push_back( {
                 (int) floor( botx[ 0 ] ),
                 (int) ceil( hix ),
-                edgeRecord::falling,
+                edgeRecord::leading,
                 & ol[ ii ]
               });
 
               edgeList->push_back( {
                 (int) floor( hix ),
                 (int) ceil( botx[ 1 ] ),
-                edgeRecord::rising,
+                edgeRecord::trailing,
                 & ol[ ii ]
               });
             }
           else  // The remaining cases are all pathological - we use the bounds
             {
-              float midx = 0.5f * ( blist[ ii ].left + blist[ ii ].right );
+              if( topY < blist[ ii ].bottom and blist[ ii ].top < bottomY )
+                {
+                  float midx;
 
-              edgeList->push_back( {
-                (int) floor( blist[ ii ].left ),
-                (int) ceil( midx ),
-                edgeRecord::falling,
-                & ol[ ii ]
-              });
+                  if( num_top == 1 )
+                    midx = topx[ 0 ];
+                  else
+                    midx = 0.5f * (blist[ ii ].left + blist[ ii ].right);
 
-              edgeList->push_back( {
-                (int) floor( midx ),
-                (int) ceil( blist[ ii ].right ),
-                edgeRecord::rising,
-                & ol[ ii ]
-                });
+                  edgeList->push_back( {
+                      (int)floor( blist[ ii ].left ),
+                      (int)ceil( midx ),
+                      edgeRecord::leading,
+                      &ol[ ii ]
+                    } );
+
+                  if( num_bottom == 1 )
+                    midx = botx[ 0 ];
+                  else
+                    midx = 0.5f * (blist[ ii ].left + blist[ ii ].right);
+
+                  edgeList->push_back( {
+                      (int)floor( midx ),
+                      (int)ceil( blist[ ii ].right ),
+                      edgeRecord::trailing,
+                      &ol[ ii ]
+                    } );
+                }
             }
         }
-      else
+      else  // this interval does not intersect the current line
         {
-          if( bottomY < blist[ ii ].top and  // the bounds are after this scanline
-              blist[ ii ].top < nextY )      // but closer than the previous top candidate
+          if( bottomY <= blist[ ii ].top and blist[ ii ].top < nextY )
             {
               nextY = blist[ ii ].top;
             }
@@ -501,16 +540,19 @@ static int computeEdgeList( int scanY,
 ---------------------------------------------------------------------------- */
 static void push_or_merge_run( std::vector< pixelRun >& rr, const pixelRun& pr )
 {
-  if( rr.empty() or
-      rr.back().value != pr.value or
-      rr.back().lineY != pr.lineY or
-      rr.back().endX != pr.startX )
+  if( 0.f < pr.value )
     {
-      rr.push_back( pr );
-    }
-  else
-    {
-      rr.back().endX = pr.endX;
+      if( rr.empty() or
+          rr.back().value != pr.value or
+          rr.back().lineY != pr.lineY or
+          rr.back().endX != pr.startX )
+        {
+          rr.push_back( pr );
+        }
+      else
+        {
+          rr.back().endX = pr.endX;
+        }
     }
 }
 /** ---------------------------------------------------------------------------
@@ -538,15 +580,14 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
       int endY = (int)std::min( (float)height, std::ceil( bounds.bottom ) );
       int right_edge = (int)std::min((float) width, ceil( bounds.right ) );
 
-      pixelRun pr;
-
       int scanY = topY;
+      pixelRun pr;
 
       std::vector<edgeRecord> edgeList;
 
       if( scanY < endY )
         {
-          for( ;; )
+          for(;;)
             {
               pr.lineY = scanY;
 
@@ -556,19 +597,15 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
               if( not edgeList.empty() )
                 {
                   std::sort( edgeList.begin(), edgeList.end() );
-
-                  std::vector< const ovalRecord *> aalist;    // for anti-aliased pixels
+                  std::set< const ovalRecord *> aalist;    // for anti-aliased pixels
+                  std::set< const ovalRecord *> xxlist;    // to track inside/outside
 
                   pr.startX = std::max( 0, edgeList[ 0 ].startx );
 
                   if( pr.startX < right_edge )
                     {
-                      int last_inside = 0;
-
                       do
                         {
-                          int inside = 0;
-
                           pr.endX = right_edge;  // assume that we're going to the edge
 
                           // For each value of x, we need to go through the list of edges
@@ -576,31 +613,33 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
 
                           for( const auto& edge : edgeList )
                             {
-                              if( edge.startx <= pr.startX )
+                              if( edge.startx <= pr.startX ) // the edge is to left or at us
                                 {
-                                  if( edge.edgeType == edgeRecord::falling )
+                                  if( edge.edgeType == edgeRecord::leading )
                                     {
-                                      if( edge.startx <= pr.startX )
+                                      if( pr.startX < edge.endx ) // we're inside the edge
                                         {
-                                          inside += 1;
+                                          aalist.insert( edge.oval );
+                                        }
+                                      else  // we're completely to the right of this edge
+                                        {
+                                          xxlist.insert( edge.oval );
                                         }
                                     }
-                                  else //  edge.Type == edgeRecord::rising
+                                  else //  edge.Type == edgeRecord::trailing
                                     {
-                                      if( edge.endx <= pr.startX )
-                                        {
-                                          inside -= 1;
-                                        }
-                                    }
+                                      xxlist.erase( edge.oval );    // this ends the solid run
 
-                                  // Check if we are in the portion that needs to be anti-aliased
-                                  if( edge.startx <= pr.startX and pr.startX < edge.endx )
-                                    {
-                                      aalist.push_back( edge.oval );
+                                      if( pr.startX < edge.endx )   // we're in the active section
+                                        {
+                                          aalist.insert( edge.oval );
+                                        }
                                     }
                                 }
-                              else  // this edge starts is beyond our current scan point
+                              else  // this edge starts is beyond our current scan point - done with this run
                                 {
+                                  // signal for the next run to begin at the start of the next edge
+
                                   pr.endX = std::min( edge.startx, right_edge );
                                   break;
                                 }
@@ -608,34 +647,31 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
 
                           if( aalist.empty() )
                             {
-                              if( 0 < inside )
+                              if( not xxlist.empty() )
                                 {
                                   pr.value = 1.f;   // a solid run
                                   push_or_merge_run( rr, pr );
                                 }
                             }
-                          else
+                          else // we might need to anti-alias an edge
                             {
-                              if( inside == 1 or ( 1 < inside and last_inside == 0 ) )
-                                {
-                                  pr.endX = pr.startX + 1;
-                                  pr.value = compute_aa_pixel( aalist, pr.startX, pr.lineY );
+                              pr.endX = pr.startX + 1;    // when we have active edges, go one pixel at the time
 
-                                  push_or_merge_run( rr, pr );
+                              if( xxlist.empty() )
+                                {
+                                  pr.value = compute_aa_pixel( aalist, pr.startX, pr.lineY );
                                 }
-                              else if( 1 < inside )
+                              else  // we're a partial edge that is completely inside of another oval
                                 {
                                   pr.value = 1.f;
-                                  pr.endX = pr.startX + 1;
-
-                                  push_or_merge_run( rr, pr );
                                 }
 
-                              aalist.resize( 0 );
+                              push_or_merge_run( rr, pr );
+                              aalist.clear();
                             }
 
+                          xxlist.clear();
                           pr.startX = pr.endX;
-                          last_inside = inside;
 
                         }  while( pr.startX < right_edge );
                     }
@@ -833,9 +869,9 @@ TEST_CASE("edgeRecord_sort")
 {
   std::vector< edgeRecord > edgeList;
 
-  edgeRecord one{ .startx = 10, .endx = 11, .edgeType = edgeRecord::falling, .oval = nullptr };
-  edgeRecord two{ .startx = 20, .endx = 21, .edgeType = edgeRecord::falling, .oval = nullptr };
-  edgeRecord three{ .startx = 30, .endx = 31, .edgeType = edgeRecord::falling, .oval = nullptr };
+  edgeRecord one{ .startx = 10, .endx = 11, .edgeType = edgeRecord::leading, .oval = nullptr };
+  edgeRecord two{ .startx = 20, .endx = 21, .edgeType = edgeRecord::leading, .oval = nullptr };
+  edgeRecord three{ .startx = 30, .endx = 31, .edgeType = edgeRecord::trailing, .oval = nullptr };
 
   CHECK( one < two );
   CHECK( two < three );
@@ -940,6 +976,152 @@ TEST_CASE( "ComputeOverlap")
   REQUIRE( computeOverlap( one, five, & area_one, & area_two ) );
   CHECK( area_one == doctest::Approx( 0.5f ) );
   CHECK( area_two == doctest::Approx( 1.f ) );
+}
+TEST_CASE("Compute Edge List Case 2-{2,1}" )
+{
+  std::vector< ovalRecord > ovalList;
+  ovalList.push_back( { 16.5f, 11.5f, 1.0f, 1.5f, 0.f } );
+
+  floatBounds bounds = computeBounds( ovalList[ 0 ] );
+  std::vector< floatBounds > blist;
+  blist.push_back( bounds );
+
+  // CASE 1-2
+  std::vector< edgeRecord > edgeList;
+  int nextY = computeEdgeList( 10, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 11 );
+  CHECK( edgeList[ 0 ].startx == 15 );
+  CHECK( edgeList[ 0 ].endx == 17 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 16 );
+  CHECK( edgeList[ 1 ].endx == 18 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+
+  // CASE 2-2
+  edgeList.clear();
+  nextY = computeEdgeList( 11, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 12 );
+  CHECK( edgeList[ 0 ].startx == 15 );
+  CHECK( edgeList[ 0 ].endx == 16 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 17 );
+  CHECK( edgeList[ 1 ].endx == 18 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+
+  // CASE 2-1
+  edgeList.clear();
+  nextY = computeEdgeList( 12, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 13 );
+  CHECK( edgeList[ 0 ].startx == 15 );
+  CHECK( edgeList[ 0 ].endx == 17 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 16 );
+  CHECK( edgeList[ 1 ].endx == 18 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+}
+TEST_CASE("Compute Edge List Case 1-{1,0}" )
+{
+  std::vector< ovalRecord > ovalList;
+  ovalList.push_back( { 8.5f, 14.5f, 1.0f, 1.f, 0.f } );
+
+  floatBounds bounds = computeBounds( ovalList[ 0 ] );
+  std::vector< floatBounds > blist;
+  blist.push_back( bounds );
+
+  // CASE 0-2
+  std::vector< edgeRecord > edgeList;
+  int nextY = computeEdgeList( 13, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 14 );
+  CHECK( edgeList[ 0 ].startx == 7 );
+  CHECK( edgeList[ 0 ].endx == 9 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 8 );
+  CHECK( edgeList[ 1 ].endx == 10 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+
+  // CHECK 2-0
+  edgeList.clear();
+  nextY = computeEdgeList( 15, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 16 );
+  CHECK( edgeList[ 0 ].startx == 7 );
+  CHECK( edgeList[ 0 ].endx == 9 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 8 );
+  CHECK( edgeList[ 1 ].endx == 10 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+}
+TEST_CASE("Compute Edge List Case 1-1" )
+{
+  std::vector< ovalRecord > ovalList;
+  ovalList.push_back( { 8.5f, 16.5f, 0.5f, 0.5f, 0.f } );
+
+  floatBounds bounds = computeBounds( ovalList[ 0 ] );
+  std::vector< floatBounds > blist;
+  blist.push_back( bounds );
+
+  // CASE 1-1
+  std::vector< edgeRecord > edgeList;
+  int nextY = computeEdgeList( 16, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 17 );
+  CHECK( edgeList[ 0 ].startx == 8 );
+  CHECK( edgeList[ 0 ].endx == 9 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 8 );
+  CHECK( edgeList[ 1 ].endx == 9 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+}
+TEST_CASE("Compute Edge List Case 0-1 and 1-0" )
+{
+  std::vector< ovalRecord > ovalList;
+  ovalList.push_back( { 8.5f, 17.75f, 0.25f, 0.25f, 0.f } );
+  ovalList.push_back( { 8.5f, 18.25f, 0.25f, 0.25f, 0.f } );
+
+  std::vector< floatBounds > blist;
+
+  floatBounds b1 = computeBounds( ovalList[ 0 ] );
+  floatBounds b2 = computeBounds( ovalList[ 1 ] );
+
+  floatBounds bounds = b1;
+  bounds.add( b2 );
+
+  blist.push_back( b1 );
+  blist.push_back( b2 );
+
+  // CASE 0-1
+  std::vector< edgeRecord > edgeList;
+  int nextY = computeEdgeList( 17, ovalList, blist, bounds, & edgeList );
+
+  REQUIRE( edgeList.size() == 2 );
+  CHECK( nextY == 18 );
+  CHECK( edgeList[ 0 ].startx == 8 );
+  CHECK( edgeList[ 0 ].endx == 9 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 8 );
+  CHECK( edgeList[ 1 ].endx == 9 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
+
+  // CASE 1-0
+  edgeList.clear();
+  nextY = computeEdgeList( 18, ovalList, blist, bounds, & edgeList );
+  CHECK( nextY == 19 );
+  CHECK( edgeList[ 0 ].startx == 8 );
+  CHECK( edgeList[ 0 ].endx == 9 );
+  CHECK( edgeList[ 0 ].edgeType == edgeRecord::leading );
+  CHECK( edgeList[ 1 ].startx == 8 );
+  CHECK( edgeList[ 1 ].endx == 9 );
+  CHECK( edgeList[ 1 ].edgeType == edgeRecord::trailing );
 }
 TEST_SUITE_END();
 #endif
