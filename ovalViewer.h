@@ -36,6 +36,7 @@ class ovalViewer : public QWidget
     public slots:
       void dumpOvalRender();
       void clearOvals();
+      void writeOvals();
 
     protected:
       void paintEvent( QPaintEvent *event ) override;

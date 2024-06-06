@@ -57,8 +57,13 @@ ovalViewer::ovalViewer( QWidget *parent ) : QWidget( parent ), cmd_( nullptr ), 
   clearOvalsXn->setShortcut( QString( "Ctrl+r" ) );
   connect( clearOvalsXn, SIGNAL( triggered(bool) ), this, SLOT( clearOvals() ) );
 
+  QAction *writeOvalsXn = new QAction( QString( "Save Ovals" ), this );
+  writeOvalsXn->setShortcut( QString( "Ctrl+s" ) );
+  connect( writeOvalsXn, SIGNAL( triggered(bool) ), this, SLOT( writeOvals() ) );
+
   addAction( dumpRenderXn );
   addAction( clearOvalsXn );
+  addAction( writeOvalsXn );
 }
 /** ----------------------------------------------------------------------------
   \fn ovalViewer::renderOnePixel
@@ -92,7 +97,7 @@ void ovalViewer::renderOnePixel( const QPoint& where )
   update();
 }
 /** ----------------------------------------------------------------------------
-  \fn ovalViewer::paintEvent
+  \fn ovalViewer::dumpOvalRender
 ---------------------------------------------------------------------------- */
 void ovalViewer::dumpOvalRender()
 {
@@ -120,7 +125,21 @@ void ovalViewer::dumpOvalRender()
     }
 }
 /** ----------------------------------------------------------------------------
-  \fn ovalViewer::paintEvent
+  \fn ovalViewer::writeOvals
+---------------------------------------------------------------------------- */
+void ovalViewer::writeOvals()
+{
+  if( not ovalList_.empty() )
+    {
+      for( const auto& one : ovalList_ )
+        {
+          printf( "ovalList_.push_back( { %.2f, %.2f, %.2f, %.2f, %.2f } );\n",
+            one.centerx, one.centery, one.radiusx, one.radiusy, one.angle );
+        }
+    }
+}
+/** ----------------------------------------------------------------------------
+  \fn ovalViewer::clearOvals
 ---------------------------------------------------------------------------- */
 void ovalViewer::clearOvals()
 {
