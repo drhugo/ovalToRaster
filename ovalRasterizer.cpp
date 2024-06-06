@@ -50,13 +50,13 @@ struct edgeRecord
     {
       if( x1 < x2 )
         {
-          startx = (int) floor( x1 );
-          endx = (int) ceil( x2 );
+          startx = (int) std::floor( x1 );
+          endx = (int) std::ceil( x2 );
         }
       else
         {
-          startx = (int) floor( x2 );
-          endx = (int) ceil( x1 );
+          startx = (int) std::floor( x2 );
+          endx = (int) std::ceil( x1 );
         }
     }
   };
@@ -446,15 +446,15 @@ static int computeEdgeList( int scanY,
                 lowx = 0.5f * ( topx[ 0 ] + topx[ 1 ] );
 
               edgeList->push_back( {
-                (int) floor( topx[ 0 ] ),
-                (int) ceil( lowx ),
+                (int) std::floor( topx[ 0 ] ),
+                (int) std::ceil( lowx ),
                 edgeRecord::leading,
                 & ol[ ii ]
               });
 
               edgeList->push_back( {
-                (int) floor( lowx ),
-                (int) ceil( topx[ 1 ] ),
+                (int) std::floor( lowx ),
+                (int) std::ceil( topx[ 1 ] ),
                 edgeRecord::trailing,
                 & ol[ ii ]
               });
@@ -469,15 +469,15 @@ static int computeEdgeList( int scanY,
                 hix = 0.5f * ( botx[ 0 ] + botx[ 1 ] );
 
               edgeList->push_back( {
-                (int) floor( botx[ 0 ] ),
-                (int) ceil( hix ),
+                (int) std::floor( botx[ 0 ] ),
+                (int) std::ceil( hix ),
                 edgeRecord::leading,
                 & ol[ ii ]
               });
 
               edgeList->push_back( {
-                (int) floor( hix ),
-                (int) ceil( botx[ 1 ] ),
+                (int) std::floor( hix ),
+                (int) std::ceil( botx[ 1 ] ),
                 edgeRecord::trailing,
                 & ol[ ii ]
               });
@@ -494,8 +494,8 @@ static int computeEdgeList( int scanY,
                     midx = 0.5f * (blist[ ii ].left + blist[ ii ].right);
 
                   edgeList->push_back( {
-                      (int)floor( blist[ ii ].left ),
-                      (int)ceil( midx ),
+                      (int) std::floor( blist[ ii ].left ),
+                      (int) std::ceil( midx ),
                       edgeRecord::leading,
                       &ol[ ii ]
                     } );
@@ -506,8 +506,8 @@ static int computeEdgeList( int scanY,
                     midx = 0.5f * (blist[ ii ].left + blist[ ii ].right);
 
                   edgeList->push_back( {
-                      (int)floor( midx ),
-                      (int)ceil( blist[ ii ].right ),
+                      (int) std::floor( midx ),
+                      (int) std::ceil( blist[ ii ].right ),
                       edgeRecord::trailing,
                       &ol[ ii ]
                     } );
@@ -535,7 +535,7 @@ static int computeEdgeList( int scanY,
     }
   else  // the edgelist is empty, nothing intersected our span
     {
-      next_scanY = std::max( (int) floor( nextY ), scanY + 1 );;
+      next_scanY = std::max( (int) std::floor( nextY ), scanY + 1 );;
     }
 
   return next_scanY;
@@ -583,7 +583,7 @@ std::vector<pixelRun> ovalListToRaster( const std::vector<ovalRecord>& ol, int w
 
       int topY = (int)std::max( 0.f, bounds.top );
       int endY = (int)std::min( (float)height, std::ceil( bounds.bottom ) );
-      int right_edge = (int)std::min((float) width, ceil( bounds.right ) );
+      int right_edge = (int)std::min((float) width, std::ceil( bounds.right ) );
 
       int scanY = topY;
       pixelRun pr;
