@@ -407,6 +407,7 @@ static int computeEdgeList( int scanY,
 {
   float topY = scanY;
   float bottomY = topY + 1.f;
+  float nextBottomY = bottomY + 1.f;
 
   float nextY = bounds.bottom;
 
@@ -511,11 +512,15 @@ static int computeEdgeList( int scanY,
                       &ol[ ii ]
                     } );
                 }
+              else
+                {
+                  nextY = bottomY;
+                }
             }
         }
       else  // this interval does not intersect the current line
         {
-          if( bottomY <= blist[ ii ].top and blist[ ii ].top < nextY )
+          if( topY <= blist[ ii ].top and blist[ ii ].top < nextY )
             {
               nextY = blist[ ii ].top;
             }
@@ -818,6 +823,9 @@ TEST_CASE( "Intervals Intersect" )
 
   CHECK( intervals_intersect( 10.f, 40.f, 30.f, 31.f ) );  // complete overlap
   CHECK( intervals_intersect( 30.1f, 30.9f, 30.f, 31.f ) );  // completely contained
+
+  CHECK( intervals_intersect( 10.f, 20.f, 0.f, 10.f ) );    // touching on the left
+  CHECK( intervals_intersect( 10.f, 20.f, 20.f, 30.f) );    // touching on the right
 }
 TEST_CASE( "Compute Roots" )
 {
