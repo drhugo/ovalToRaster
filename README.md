@@ -38,3 +38,5 @@ std::vector< pixelRun > ovalListToRaster( const std::vector< ovalRecord >& ol, i
 ```
 
 The code is extesively commented and includes tests that use the [**doctest**](https://github.com/doctest/doctest/blob/master/README.md) framework.
+
+The code includes a small [Qt](https://www.qt.io/) based application that can be used to drive the oval renderer for testing.
